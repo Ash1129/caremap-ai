@@ -4,7 +4,14 @@ Imports are intentionally lazy so row-level agents can run in minimal
 Databricks jobs even when optional local-demo dependencies are absent.
 """
 
-__all__ = ["ExtractionAgent", "ValidationAgent", "TrustScoringAgent", "QueryAgent", "DesertDetectionAgent"]
+__all__ = [
+    "ExtractionAgent",
+    "ValidationAgent",
+    "TrustScoringAgent",
+    "QueryAgent",
+    "DesertDetectionAgent",
+    "SymptomTriageAgent",
+]
 
 
 def __getattr__(name: str):
@@ -24,6 +31,10 @@ def __getattr__(name: str):
         from caremap_ai.query import QueryAgent
 
         return QueryAgent
+    if name == "SymptomTriageAgent":
+        from caremap_ai.triage import SymptomTriageAgent
+
+        return SymptomTriageAgent
     if name == "DesertDetectionAgent":
         from caremap_ai.desert import DesertDetectionAgent
 

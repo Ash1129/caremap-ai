@@ -32,7 +32,8 @@ flowchart LR
 - **Extraction Agent:** rule-first extraction from `description`, `specialties`, `procedure`, `equipment`, and `capability`; optional Agent Bricks / Model Serving repair for ambiguous rows.
 - **Validation Agent:** contradiction checks such as surgery without anesthesiologist, ICU without oxygen or ventilator, and emergency claims without 24/7 evidence.
 - **Trust Scoring Agent:** interpretable 0-100 score with explicit additions and penalties.
-- **Query Agent:** parses intent, filters extracted capabilities, ranks by trust, distance, capability match, and contradiction penalties.
+- **Symptom Triage Agent:** maps symptom-only queries to facility capabilities for routing, without diagnosing.
+- **Query Agent:** parses intent, filters extracted capabilities, ranks by trust, distance, explicit capability match, symptom-triage capability match, and contradiction penalties.
 - **Desert Detection Agent:** groups by state, district/city, and PIN code to identify high-risk service gaps.
 
 ## Databricks Run Path
@@ -103,6 +104,8 @@ The local demo uses `data/VF_Hackathon_Dataset_India_Large.xlsx` when present. T
 ## Demo Queries
 
 - Emergency surgery in rural Bihar
+- Chest pain in Bihar, need emergency care with oxygen and ICU support
+- Newborn breathing difficulty near Assam
 - Dialysis centers in underserved regions
 - Trauma care facilities with high trust score
 - Regions with no ICU access
@@ -122,3 +125,5 @@ Each recommendation includes:
 ## Notes for Judges
 
 This is not keyword search. The system first converts noisy text into structured clinical capability claims, then performs self-correction and trust scoring before query ranking. Contradictions lower trust even when a keyword match exists.
+
+The symptom triage layer is for routing only. It does not diagnose disease or provide medical advice; emergency symptoms are mapped to emergency-ready facility capabilities and include a safety note.

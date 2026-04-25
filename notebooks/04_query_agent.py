@@ -9,7 +9,7 @@
 
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog catalog")
 dbutils.widgets.text("schema", "caremap_ai", "Unity Catalog schema")
-dbutils.widgets.text("query", "Find nearest facility in Bihar that can perform emergency appendectomy and has oxygen and ICU support", "Natural language query")
+dbutils.widgets.text("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support", "Natural language query")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -49,6 +49,8 @@ print(answer["reasoning_steps"])
 # COMMAND ----------
 
 sample_queries = [
+    "Chest pain in Bihar, need emergency care with oxygen and ICU support",
+    "Newborn breathing difficulty near Assam",
     "Emergency surgery in rural Bihar with ICU and oxygen support",
     "Dialysis centers in underserved regions",
     "Trauma care facilities with high trust score",

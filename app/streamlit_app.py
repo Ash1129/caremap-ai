@@ -75,7 +75,7 @@ tab_search, tab_deserts, tab_data = st.tabs(["Search", "Medical Deserts", "Evide
 with tab_search:
     query = st.text_input(
         "Ask a clinical access question",
-        "Find nearest facility in Bihar that can perform emergency appendectomy and has oxygen and ICU support",
+        "Chest pain in Bihar, need emergency care with oxygen and ICU support",
     )
     agent = QueryAgent(facilities)
     answer = agent.answer(query, top_k=10)
@@ -91,6 +91,9 @@ with tab_search:
             right.metric("Trust", facility["trust_score"], render_score(facility["trust_score"]))
             if facility["contradiction_flags"]:
                 st.warning(", ".join(facility["contradiction_flags"]))
+            triage = facility.get("symptom_triage") or {}
+            if triage.get("safety_note"):
+                st.info(triage["safety_note"])
             st.write(facility["explanation"])
             with st.expander("Evidence snippets"):
                 st.json(facility["evidence"])
