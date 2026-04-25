@@ -36,8 +36,8 @@ flowchart LR
 ## Databricks Run Path
 
 1. Upload this repo to Databricks Repos as `/Workspace/Repos/caremap-ai`.
-2. Upload the dataset to a Unity Catalog volume, for example:
-   `/Volumes/workspace/caremap_ai/raw/facilities.xlsx`
+2. Upload the dataset into the repo `data/` folder:
+   `/Workspace/Repos/ap2538@cornell.edu/caremap-ai/data/VF_Hackathon_Dataset_India_Large.xlsx`
 3. Run notebooks in order:
    - `notebooks/00_setup_and_ingest.py`
    - `notebooks/01_agent_pipeline.py`
@@ -76,7 +76,7 @@ The ingestion notebook enforces the requested columns exactly:
 
 ## Local Demo
 
-Local mode is only a fallback for development and judging convenience.
+Local mode is only a fallback for development and judging convenience. The app looks for your real Excel file first at `data/VF_Hackathon_Dataset_India_Large.xlsx`, then in your local Downloads folder, then falls back to `data/sample_facilities.csv`.
 
 ```bash
 python -m venv .venv
@@ -85,7 +85,7 @@ pip install -r requirements-local.txt
 streamlit run app/streamlit_app.py
 ```
 
-The local demo uses `data/sample_facilities.csv`, the deterministic agents, and a pandas/Streamlit interface.
+The local demo uses `data/VF_Hackathon_Dataset_India_Large.xlsx` when present. The committed `data/sample_facilities.csv` is only a fallback demo dataset.
 
 ## Demo Queries
 

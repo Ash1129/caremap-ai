@@ -57,7 +57,15 @@ st.set_page_config(page_title="CareMap AI", layout="wide")
 st.title("CareMap AI")
 st.caption("Agentic Healthcare Intelligence System for India")
 
-default_path = str(ROOT / "data" / "sample_facilities.csv")
+real_dataset = ROOT / "data" / "VF_Hackathon_Dataset_India_Large.xlsx"
+downloads_dataset = Path.home() / "Downloads" / "VF_Hackathon_Dataset_India_Large.xlsx"
+sample_dataset = ROOT / "data" / "sample_facilities.csv"
+if real_dataset.exists():
+    default_path = str(real_dataset)
+elif downloads_dataset.exists():
+    default_path = str(downloads_dataset)
+else:
+    default_path = str(sample_dataset)
 data_path = st.sidebar.text_input("Dataset path", default_path)
 source_df = load_source(data_path)
 facilities = run_pipeline(source_df.to_json())

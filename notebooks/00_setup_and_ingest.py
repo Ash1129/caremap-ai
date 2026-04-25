@@ -9,7 +9,11 @@
 
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog catalog")
 dbutils.widgets.text("schema", "caremap_ai", "Unity Catalog schema")
-dbutils.widgets.text("source_path", "/Volumes/workspace/caremap_ai/raw/facilities.xlsx", "Excel or CSV source path")
+dbutils.widgets.text(
+    "source_path",
+    "/Workspace/Repos/ap2538@cornell.edu/caremap-ai/data/VF_Hackathon_Dataset_India_Large.xlsx",
+    "Excel or CSV source path",
+)
 dbutils.widgets.text("source_format", "excel", "excel or csv")
 
 catalog = dbutils.widgets.get("catalog")
