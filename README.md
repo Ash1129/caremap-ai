@@ -35,7 +35,7 @@ flowchart LR
 
 ## Databricks Run Path
 
-1. Upload this repo to Databricks Repos as `/Workspace/Repos/caremap-ai`.
+1. Upload this repo to Databricks Repos. In your workspace it appears as `/Workspace/Repos/ap2538@cornell.edu/caremap-ai`.
 2. Upload the dataset into the repo `data/` folder:
    `/Workspace/Repos/ap2538@cornell.edu/caremap-ai/data/VF_Hackathon_Dataset_India_Large.xlsx`
 3. Run notebooks in order:

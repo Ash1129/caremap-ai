@@ -24,7 +24,9 @@ capability_table = f"{catalog}.{schema}.facility_capabilities"
 
 import sys
 
-repo_src = "/Workspace/Repos/caremap-ai/src"
+notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+repo_root = "/Workspace/" + "/".join(notebook_path.strip("/").split("/")[:3])
+repo_src = f"{repo_root}/src"
 if repo_src not in sys.path:
     sys.path.append(repo_src)
 
