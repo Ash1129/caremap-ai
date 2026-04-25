@@ -1,0 +1,22 @@
+databricks:
+  catalog: workspace
+  schema: caremap_ai
+  raw_table: raw_facilities
+  capability_table: facility_capabilities
+  desert_table: medical_deserts
+  mlflow_experiment: /Shared/caremap-ai-traces
+
+agent_bricks:
+  # Optional. Leave blank for rule-first extraction only.
+  extraction_endpoint: ""
+  embedding_endpoint: databricks-gte-large-en
+
+vector_search:
+  endpoint: caremap-vector-endpoint
+  index: facility_capabilities_index
+
+demo_queries:
+  - Emergency surgery in rural Bihar
+  - Dialysis centers in underserved regions
+  - Trauma care facilities with high trust score
+  - Regions with no ICU access
