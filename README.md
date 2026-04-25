@@ -33,7 +33,7 @@ flowchart LR
 - **Validation Agent:** contradiction checks such as surgery without anesthesiologist, ICU without oxygen or ventilator, and emergency claims without 24/7 evidence.
 - **Trust Scoring Agent:** interpretable 0-100 score with explicit additions and penalties.
 - **Symptom Triage Agent:** maps symptom-only queries to facility capabilities for routing, without diagnosing.
-- **Query Agent:** parses intent, filters extracted capabilities, ranks by trust, distance, explicit capability match, symptom-triage capability match, and contradiction penalties.
+- **Query Agent:** retrieves semantic candidates from Mosaic AI Vector Search, parses intent, filters extracted capabilities, and reranks by trust, distance, explicit capability match, symptom-triage capability match, and contradiction penalties.
 - **Desert Detection Agent:** groups by state, district/city, and PIN code to identify high-risk service gaps.
 
 ## Databricks Run Path

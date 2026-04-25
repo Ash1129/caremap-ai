@@ -24,4 +24,4 @@ Using `workspace.caremap_ai.medical_deserts`, identify high-risk districts and P
 
 ## Query Agent Debugging
 
-Given a user query, inspect the Query Agent output and MLflow traces. Explain which explicit capabilities were parsed, whether the Symptom Triage Agent detected a symptom category, which preferred capabilities were added, which filters removed candidates, and whether ranking was driven more by trust, contradiction penalties, symptom-triage match, or distance.
+Given a user query, inspect the Query Agent output and MLflow traces. Explain how Mosaic AI Vector Search selected semantic candidates, which explicit capabilities were parsed, whether the Symptom Triage Agent detected a symptom category, which preferred capabilities were added, which filters removed candidates, and whether ranking was driven more by trust, contradiction penalties, symptom-triage match, or distance.
