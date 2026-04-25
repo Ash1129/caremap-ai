@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # CareMap AI - 02 Mosaic AI Vector Search
+# MAGIC # CareMap AI - 03 Mosaic AI Vector Search
 # MAGIC
 # MAGIC Creates a Delta Sync index over the extracted summary and messy source fields.
 

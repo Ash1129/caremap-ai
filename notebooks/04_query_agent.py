@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # CareMap AI - 03 Query Agent
+# MAGIC # CareMap AI - 04 Query Agent
 # MAGIC
 # MAGIC Accepts complex natural-language questions, retrieves candidates, filters capabilities,
 # MAGIC ranks by trust, and returns evidence.

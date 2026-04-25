@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # CareMap AI - 01 Agent Pipeline
+# MAGIC # CareMap AI - 02 Agent Pipeline
 # MAGIC
 # MAGIC Runs the multi-agent extraction, validation, and trust scoring workflow.
 # MAGIC Each phase is logged with MLflow tracing-friendly spans.
@@ -17,7 +17,7 @@ schema = dbutils.widgets.get("schema")
 endpoint_name = dbutils.widgets.get("agent_bricks_endpoint")
 limit = int(dbutils.widgets.get("limit"))
 
-raw_table = f"{catalog}.{schema}.raw_facilities"
+clean_table = f"{catalog}.{schema}.clean_facilities"
 capability_table = f"{catalog}.{schema}.facility_capabilities"
 
 # COMMAND ----------
@@ -44,7 +44,7 @@ import json
 mlflow.set_tracking_uri("databricks")
 setup_mlflow(f"/Shared/caremap-ai-traces")
 
-source_df = spark.table(raw_table)
+source_df = spark.table(clean_table)
 if limit > 0:
     source_df = source_df.limit(limit)
 source_pdf = source_df.toPandas()

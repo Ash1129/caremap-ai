@@ -4,6 +4,8 @@ databricks:
   default_source_path: /Workspace/Repos/ap2538@cornell.edu/caremap-ai/data/VF_Hackathon_Dataset_India_Large.xlsx
   default_source_format: excel
   raw_table: raw_facilities
+  clean_table: clean_facilities
+  profile_table: data_quality_profile
   capability_table: facility_capabilities
   desert_table: medical_deserts
   mlflow_experiment: /Shared/caremap-ai-traces

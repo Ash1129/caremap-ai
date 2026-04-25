@@ -4,7 +4,11 @@ Use these prompts inside Databricks Genie Code Agent mode while running the note
 
 ## Pipeline Run
 
-Inspect the Unity Catalog tables in `workspace.caremap_ai`. Run the CareMap AI notebooks in order and stop if the raw dataset does not match the required schema. Summarize row counts, missing fields, and top data quality risks.
+Inspect the Unity Catalog tables in `workspace.caremap_ai`. Run the CareMap AI notebooks in order and stop if the raw dataset does not match the required schema. Summarize row counts from `raw_facilities`, `clean_facilities`, and `facility_capabilities`, plus the top data quality risks from `data_quality_profile`.
+
+## Cleaning Review
+
+Review `workspace.caremap_ai.data_quality_profile` and `workspace.caremap_ai.clean_facilities`. Identify columns with high missingness, rows without capability text, rows without coordinates, and any state/city normalization issues. Do not treat clinical claims as verified facts.
 
 ## Extraction Review
 

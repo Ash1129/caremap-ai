@@ -2,8 +2,8 @@
 # MAGIC %md
 # MAGIC # CareMap AI - 00 Setup and Ingest
 # MAGIC
-# MAGIC Loads the exact healthcare facility schema from Excel/CSV into Unity Catalog Delta tables.
-# MAGIC Designed for Databricks Free Edition first, with conservative fallbacks for small hackathon files.
+# MAGIC Loads the exact healthcare facility schema from Excel/CSV into a raw Unity Catalog Delta table.
+# MAGIC The next notebook performs cleaning/profiling without treating any clinical claims as true.
 
 # COMMAND ----------
 
@@ -49,6 +49,8 @@ except Exception:
 
 import pandas as pd
 
+spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "false")
+
 if source_format == "excel":
     pdf = pd.read_excel(source_path)
 elif source_format == "csv":
@@ -65,7 +67,13 @@ display(pdf.head(10))
 
 # COMMAND ----------
 
-df = spark.createDataFrame(pdf)
+# Keep the raw table Spark-safe while preserving the original source schema.
+# Excel often produces mixed object columns that Arrow/Spark cannot infer reliably.
+raw_pdf = pdf.copy()
+for col in SOURCE_COLUMNS:
+    raw_pdf[col] = raw_pdf[col].astype("string").fillna("")
+
+df = spark.createDataFrame(raw_pdf)
 (
     df.write.format("delta")
     .mode("overwrite")
@@ -83,4 +91,4 @@ display(spark.sql(f"SELECT COUNT(*) AS n_facilities FROM {raw_table}"))
 # MAGIC
 # MAGIC Use this inside Genie Code Agent mode after import:
 # MAGIC
-# MAGIC > Inspect `workspace.caremap_ai.raw_facilities`, verify schema quality, and help run the CareMap AI notebooks in order: ingest, agent pipeline, vector search, query agent, and desert dashboard.
+# MAGIC > Inspect `workspace.caremap_ai.raw_facilities`, verify schema quality, and help run the CareMap AI notebooks in order: ingest, clean/profile, agent pipeline, vector search, query agent, and desert dashboard.
