@@ -88,7 +88,7 @@ class QueryAgent:
     ):
         self.facilities = facilities.copy()
         self.symptom_triage_agent = symptom_triage_agent or SymptomTriageAgent()
-        self.semantic_retriever = semantic_retriever  # OpenAISemanticRetriever or LocalVectorFallback
+        self.semantic_retriever = semantic_retriever
 
     def parse_intent(self, query: str) -> ParsedIntent:
         lower = query.lower()
