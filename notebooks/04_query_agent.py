@@ -8,22 +8,19 @@
 
 # COMMAND ----------
 
-dbutils.widgets.removeAll()
-
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog catalog")
 dbutils.widgets.text("schema", "caremap_ai", "Unity Catalog schema")
 dbutils.widgets.text("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support", "Natural language query")
 dbutils.widgets.text("openai_api_key", "", "OpenAI API key (leave blank to read from env/secret)")
 dbutils.widgets.text("top_k", "10", "Number of results to return")
 
-catalog = dbutils.widgets.get("catalog")
-schema = dbutils.widgets.get("schema")
-query = dbutils.widgets.get("query")
-openai_api_key = dbutils.widgets.get("openai_api_key") or None
-try:
-    top_k = int(dbutils.widgets.get("top_k"))
-except (ValueError, TypeError):
-    top_k = 10
+# getArgument is a Databricks built-in that returns the default when the widget
+# value is missing or the widget system hasn't initialised yet — safer than .get()
+catalog = getArgument("catalog", "workspace")
+schema = getArgument("schema", "caremap_ai")
+query = getArgument("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support")
+openai_api_key = getArgument("openai_api_key", "") or None
+top_k = int(getArgument("top_k", "10"))
 capability_table = f"{catalog}.{schema}.facility_capabilities"
 
 # COMMAND ----------
