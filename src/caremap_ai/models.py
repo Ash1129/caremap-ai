@@ -146,6 +146,8 @@ class RankedFacility(CareMapBaseModel):
     pin_code: str | None = None
     trust_score: int = 0
     rank_score: float = 0.0
+    llm_fit_score: float | None = None
+    llm_score_reason: str | None = None
     contradiction_flags: list[str] = _field(default_factory=list)
     evidence: dict[str, Any] = _field(default_factory=dict)
     explanation: str = ""

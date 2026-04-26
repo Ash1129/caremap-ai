@@ -6,3 +6,4 @@ mlflow>=3.1.0
 pyyaml>=6.0.1
 pydantic>=1.10.0
 pytest>=8.2.0
+openai>=1.30.0

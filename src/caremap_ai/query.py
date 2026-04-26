@@ -86,10 +86,14 @@ class QueryAgent:
         facilities: pd.DataFrame,
         symptom_triage_agent: SymptomTriageAgent | None = None,
         semantic_retriever=None,
+        llm_scorer=None,
+        llm_rerank_top_n: int = 12,
     ):
         self.facilities = facilities.copy()
         self.symptom_triage_agent = symptom_triage_agent or SymptomTriageAgent()
         self.semantic_retriever = semantic_retriever
+        self.llm_scorer = llm_scorer
+        self.llm_rerank_top_n = llm_rerank_top_n
 
     def parse_intent(self, query: str) -> ParsedIntent:
         lower = query.lower()
@@ -165,7 +169,32 @@ class QueryAgent:
         candidates = candidates.assign(
             _rank_score=candidates.apply(lambda r: self._rank_row(r, intent), axis=1)
         )
-        ranked = candidates.sort_values("_rank_score", ascending=False).head(top_k)
+        ranked_pool = candidates.sort_values("_rank_score", ascending=False).head(max(top_k, self.llm_rerank_top_n))
+        llm_note = "LLM fit scoring disabled; deterministic ranking used."
+        if self.llm_scorer is not None:
+            try:
+                llm_scores = self.llm_scorer.score_candidates(
+                    query=query,
+                    candidates=ranked_pool,
+                    max_candidates=self.llm_rerank_top_n,
+                )
+                if llm_scores:
+                    ranked_pool = ranked_pool.copy()
+                    ranked_pool["_llm_fit_score"] = ranked_pool.index.map(
+                        lambda idx: llm_scores.get(idx).llm_fit_score if idx in llm_scores else None
+                    )
+                    ranked_pool["_llm_score_reason"] = ranked_pool.index.map(
+                        lambda idx: llm_scores.get(idx).llm_score_reason if idx in llm_scores else ""
+                    )
+                    ranked_pool["_final_rank_score"] = ranked_pool.apply(self._combined_llm_rank, axis=1)
+                    ranked_pool = ranked_pool.sort_values("_final_rank_score", ascending=False)
+                    llm_note = f"LLM fit scorer reranked the top {len(llm_scores)} evidence-backed candidates."
+                else:
+                    llm_note = "LLM fit scorer returned no usable scores; deterministic ranking used."
+            except Exception as exc:
+                logger.warning("LLM fit scorer failed (%s); using deterministic ranking.", exc)
+                llm_note = f"LLM fit scorer failed ({type(exc).__name__}); deterministic ranking used."
+        ranked = ranked_pool.head(top_k)
 
         rows = []
         for _, row in ranked.iterrows():
@@ -182,10 +211,12 @@ class QueryAgent:
                     district_city=row.get("district_city"),
                     pin_code=row.get("pin_code"),
                     trust_score=int(row.get("trust_score", 0)),
-                    rank_score=round(float(row.get("_rank_score", 0)), 2),
+                    rank_score=round(float(row.get("_final_rank_score", row.get("_rank_score", 0)) or 0), 2),
+                    llm_fit_score=self._optional_float(row.get("_llm_fit_score")),
+                    llm_score_reason=self._optional_string(row.get("_llm_score_reason")),
                     contradiction_flags=row.get("contradiction_flags", []),
                     evidence=evidence,
-                    explanation=row.get("explanation", ""),
+                    explanation=self._merge_explanations(row),
                     symptom_triage={
                         "categories": intent.symptom_categories,
                         "urgency": intent.urgency,
@@ -211,9 +242,42 @@ class QueryAgent:
                 self._triage_reasoning_step(intent),
                 retrieval_note,
                 cap_note,
-                "Final rank = trust score + semantic similarity + capability/triage bonuses + local geography bonuses − contradiction penalty − distance penalty.",
+                llm_note,
+                "Final rank combines deterministic readiness/routing score with optional LLM query-fit score when enabled.",
             ],
         ).to_dict()
+
+    @staticmethod
+    def _optional_float(value: object) -> float | None:
+        if value is None or pd.isna(value):
+            return None
+        return round(float(value), 2)
+
+    @staticmethod
+    def _optional_string(value: object) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @staticmethod
+    def _combined_llm_rank(row: pd.Series) -> float:
+        deterministic = float(row.get("_rank_score") or 0.0)
+        llm_fit = row.get("_llm_fit_score")
+        if llm_fit is None or pd.isna(llm_fit):
+            return deterministic
+        # Keep deterministic logic in control while allowing evidence-aware
+        # query fit to break ties and demote weak matches.
+        return 0.65 * deterministic + 0.35 * float(llm_fit)
+
+    @staticmethod
+    def _merge_explanations(row: pd.Series) -> str:
+        explanation = str(row.get("explanation") or "")
+        llm_reason = row.get("_llm_score_reason")
+        llm_fit = row.get("_llm_fit_score")
+        if llm_reason and llm_fit is not None and not pd.isna(llm_fit):
+            return f"{explanation} LLM query-fit score {round(float(llm_fit), 1)}/100: {llm_reason}"
+        return explanation
 
     @staticmethod
     def _rank_row(row: pd.Series, intent: ParsedIntent) -> float:

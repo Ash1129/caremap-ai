@@ -10,6 +10,20 @@ from caremap_ai.query import QueryAgent
 from caremap_ai.triage import SymptomTriageAgent
 
 
+class FakeLLMScorer:
+    def score_candidates(self, query, candidates, max_candidates=12):
+        from caremap_ai.llm_scoring import LLMScore
+
+        scores = {}
+        for idx, row in candidates.iterrows():
+            fit = 95 if "Good Fit" in row["name"] else 10
+            scores[idx] = LLMScore(
+                llm_fit_score=fit,
+                llm_score_reason=f"Fake score for {query}: {fit}",
+            )
+        return scores
+
+
 def test_pipeline_flags_surgery_without_anesthesiologist():
     row = {
         "name": "Test Hospital",
@@ -178,3 +192,37 @@ def test_query_agent_filters_to_explicit_state_when_available():
     answer = QueryAgent(facilities).answer("chest pain in Bihar", top_k=3)
     assert [row["state"] for row in answer["ranked_facilities"]] == ["Bihar"]
     assert "Applied state filter" in answer["reasoning_steps"][2]
+
+
+def test_query_agent_can_rerank_with_llm_fit_scorer():
+    import pandas as pd
+
+    facilities = pd.DataFrame(
+        [
+            {
+                "name": "High Trust Weak Fit",
+                "state": "Bihar",
+                "district_city": "Gaya",
+                "pin_code": "823001",
+                "trust_score": 95,
+                "contradiction_flags": [],
+                "embedding_text": "general hospital",
+                "extracted_evidence": {},
+            },
+            {
+                "name": "Good Fit Hospital",
+                "state": "Bihar",
+                "district_city": "Gaya",
+                "pin_code": "823001",
+                "trust_score": 80,
+                "contradiction_flags": [],
+                "embedding_text": "chest pain emergency oxygen icu",
+                "extracted_evidence": {"has_icu": ["ICU"], "has_oxygen": ["oxygen"]},
+            },
+        ]
+    )
+
+    answer = QueryAgent(facilities, llm_scorer=FakeLLMScorer()).answer("chest pain in Bihar", top_k=2)
+    assert answer["ranked_facilities"][0]["name"] == "Good Fit Hospital"
+    assert answer["ranked_facilities"][0]["llm_fit_score"] == 95
+    assert any("LLM fit scorer reranked" in step for step in answer["reasoning_steps"])
