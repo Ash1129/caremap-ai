@@ -8,45 +8,19 @@
 
 # COMMAND ----------
 
-# ── Config — edit these directly if the widget UI throws errors ──────────
-DEFAULTS = {
-    "catalog": "workspace",
-    "schema": "caremap_ai",
-    "query": "Chest pain in Bihar, need emergency care with oxygen and ICU support",
-    "openai_api_key": "",  # leave blank to use OPENAI_API_KEY env var
-    "top_k": "10",
-}
-
-def _w(name):
-    """Read a widget value; fall back to DEFAULTS if the widget system NPEs."""
-    try:
-        dbutils.widgets.text(name, DEFAULTS[name])
-    except Exception:
-        pass
-    try:
-        val = dbutils.widgets.get(name)
-        if isinstance(val, str) and "Exception" not in val:
-            return val
-    except Exception:
-        pass
-    return DEFAULTS[name]
-
-catalog        = _w("catalog")
-schema         = _w("schema")
-query          = _w("query")
-openai_api_key = _w("openai_api_key") or None
-top_k          = int(_w("top_k"))
+catalog          = "workspace"
+schema           = "caremap_ai"
+openai_api_key   = None  # set to your key string, or leave None to use OPENAI_API_KEY env var
+top_k            = 10
 capability_table = f"{catalog}.{schema}.facility_capabilities"
 
 # COMMAND ----------
 
 import sys
 
-notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-repo_root = "/Workspace/" + "/".join(notebook_path.strip("/").split("/")[:3])
-repo_src = f"{repo_root}/src"
+repo_src = "/Workspace/Repos/ap2538@cornell.edu/caremap-ai/src"
 if repo_src not in sys.path:
-    sys.path.append(repo_src)
+    sys.path.insert(0, repo_src)
 
 from caremap_ai.mlflow_utils import setup_mlflow, trace_span
 from caremap_ai.query import QueryAgent
@@ -90,25 +64,15 @@ if "contradiction_flags" in facilities.columns:
 retriever = OpenAISemanticRetriever(facilities=facilities, api_key=openai_api_key)
 agent = QueryAgent(facilities, semantic_retriever=retriever)
 
+# COMMAND ----------
+
+query = input("Enter your query: ")
+
 with mlflow.start_run(run_name="caremap_query_agent"):
     with trace_span("query_agent", query=query):
         answer = agent.answer(query, top_k=top_k)
 
-display(answer["ranked_facilities"])
+import pandas as pd
+cols = ["name", "state", "district_city", "pin_code", "trust_score", "rank_score", "explanation"]
+display(pd.DataFrame(answer["ranked_facilities"])[cols])
 print("\n".join(answer["reasoning_steps"]))
-
-# COMMAND ----------
-
-sample_queries = [
-    "Chest pain in Bihar, need emergency care with oxygen and ICU support",
-    "Newborn breathing difficulty near Assam",
-    "Emergency surgery in rural Bihar with ICU and oxygen support",
-    "Dialysis centers in underserved regions",
-    "Trauma care facilities with high trust score",
-    "Regions with no ICU access",
-]
-
-for sample in sample_queries:
-    print("\nQUERY:", sample)
-    # Re-use the same retriever — embedding matrix is already built
-    print(QueryAgent(facilities, semantic_retriever=retriever).answer(sample, top_k=3)["ranked_facilities"])
