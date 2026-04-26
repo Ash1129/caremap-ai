@@ -30,6 +30,49 @@ def test_pipeline_flags_surgery_without_anesthesiologist():
     assert result["trust_score"] < 70
 
 
+def test_trust_score_stays_low_for_sparse_noncritical_claims():
+    row = {
+        "name": "Sparse Dental Clinic",
+        "address_stateOrRegion": "Kerala",
+        "address_city": "Thrissur",
+        "address_zipOrPostcode": "680001",
+        "description": "Dental clinic with routine consultations.",
+        "specialties": "Dental",
+        "procedure": "",
+        "equipment": "",
+        "capability": "",
+        "numberDoctors": 0,
+        "capacity": 0,
+        "distinct_social_media_presence_count": 3,
+        "number_of_facts_about_the_organization": 8,
+    }
+    result = CareMapAgentPipeline().run_row(row)
+    assert result["trust_score"] <= 62
+    assert "too_many_unknown_capabilities" in result["contradiction_flags"]
+
+
+def test_trust_score_rewards_complete_emergency_evidence():
+    row = {
+        "name": "Evidence Backed Hospital",
+        "address_stateOrRegion": "Bihar",
+        "address_city": "Gaya",
+        "address_zipOrPostcode": "823001",
+        "description": "24x7 emergency hospital with ICU, central oxygen, ventilators, operation theatre, anesthesia team and trauma care.",
+        "specialties": "Emergency medicine, critical care, anesthesiology",
+        "procedure": "Emergency surgery and appendectomy",
+        "equipment": "Ventilator, oxygen plant, anesthesia machine",
+        "capability": "ICU trauma emergency surgery",
+        "numberDoctors": 12,
+        "capacity": 80,
+        "distinct_social_media_presence_count": 2,
+        "number_of_facts_about_the_organization": 6,
+        "recency_of_page_update": 120,
+    }
+    result = CareMapAgentPipeline().run_row(row)
+    assert result["trust_score"] >= 85
+    assert not result["contradiction_flags"]
+
+
 def test_symptom_triage_maps_chest_pain_to_emergency_support():
     result = SymptomTriageAgent().triage("I have chest pain and shortness of breath in Bihar")
     assert result.urgency == "emergency"
