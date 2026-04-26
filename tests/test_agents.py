@@ -94,3 +94,44 @@ def test_query_agent_uses_city_distance_for_place_queries():
     assert answer["intent"]["city"] == "Thrissur"
     assert answer["intent"]["state"] == "Kerala"
     assert answer["ranked_facilities"][0]["name"] == "Thrissur Care Hospital"
+
+
+def test_query_agent_filters_to_explicit_state_when_available():
+    import pandas as pd
+
+    facilities = pd.DataFrame(
+        [
+            {
+                "name": "National High Trust Hospital",
+                "state": "Rajasthan",
+                "district_city": "Pokaran",
+                "pin_code": "345021",
+                "latitude": 26.9200,
+                "longitude": 71.9200,
+                "trust_score": 100,
+                "contradiction_flags": [],
+                "embedding_text": "emergency oxygen icu chest pain care",
+                "has_icu": True,
+                "has_oxygen": True,
+                "availability_24_7": True,
+            },
+            {
+                "name": "Bihar Emergency Hospital",
+                "state": "Bihar",
+                "district_city": "Gaya",
+                "pin_code": "823001",
+                "latitude": 24.7914,
+                "longitude": 85.0002,
+                "trust_score": 70,
+                "contradiction_flags": [],
+                "embedding_text": "emergency oxygen icu chest pain care bihar",
+                "has_icu": True,
+                "has_oxygen": True,
+                "availability_24_7": True,
+            },
+        ]
+    )
+
+    answer = QueryAgent(facilities).answer("chest pain in Bihar", top_k=3)
+    assert [row["state"] for row in answer["ranked_facilities"]] == ["Bihar"]
+    assert "Applied state filter" in answer["reasoning_steps"][2]

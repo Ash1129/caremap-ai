@@ -122,18 +122,18 @@ class QueryAgent:
         intent = self.parse_intent(query)
         candidates = self.facilities.copy()
         self._infer_location_from_facilities(query, intent, candidates)
+        candidates, location_filter_note = self._apply_location_filter(candidates, intent)
 
-        # Soft state filter: prefer matches but don't drop non-matching rows entirely
-        # when a retriever is present (it may surface relevant cross-state results).
         retrieval_note: str
         if self.semantic_retriever is not None:
             try:
-                scores = self.semantic_retriever.scores_for_query(query)
-                # scores is aligned with self.facilities; reindex onto candidates
-                candidates["_semantic_score"] = scores[: len(candidates)]
+                scored_facilities = self.facilities.copy()
+                scored_facilities["_semantic_score"] = self.semantic_retriever.scores_for_query(query)[: len(scored_facilities)]
+                candidates = candidates.join(scored_facilities["_semantic_score"], how="left")
+                candidates["_semantic_score"] = candidates["_semantic_score"].fillna(0.0)
                 retrieval_note = (
-                    f"Semantic retriever scored all {len(candidates)} facilities; "
-                    "no candidates were hard-filtered."
+                    f"Semantic retriever scored {len(self.facilities)} facilities; "
+                    f"ranking used {len(candidates)} location-aware candidates."
                 )
             except Exception as exc:
                 logger.warning("Semantic retriever failed (%s); falling back to TF-IDF.", exc)
@@ -207,10 +207,11 @@ class QueryAgent:
             reasoning_steps=[
                 "Parsed intent into capabilities and geography.",
                 self._location_reasoning_step(intent),
+                location_filter_note,
                 self._triage_reasoning_step(intent),
                 retrieval_note,
                 cap_note,
-                "Final rank = trust score + semantic similarity + capability/triage bonuses + city/state/PIN bonuses − contradiction penalty − distance penalty.",
+                "Final rank = trust score + semantic similarity + capability/triage bonuses + local geography bonuses − contradiction penalty − distance penalty.",
             ],
         ).to_dict()
 
@@ -309,6 +310,34 @@ class QueryAgent:
             if not latitudes.empty and not longitudes.empty:
                 intent.latitude = float(latitudes.median())
                 intent.longitude = float(longitudes.median())
+
+    def _apply_location_filter(self, df: pd.DataFrame, intent: ParsedIntent) -> tuple[pd.DataFrame, str]:
+        """Constrain search to explicit user geography when matching rows exist."""
+
+        if intent.pin_code and "pin_code" in df.columns:
+            pin_series = self._clean_text_series(df, "pin_code")
+            matches = df[pin_series == intent.pin_code]
+            if not matches.empty:
+                return matches.copy(), f"Applied PIN filter: kept {len(matches)} facilities in {intent.pin_code}."
+
+        if intent.city and "district_city" in df.columns:
+            city_series = self._clean_text_series(df, "district_city")
+            matches = df[city_series.str.lower() == intent.city.lower()]
+            if intent.state and not matches.empty and "state" in matches.columns:
+                state_series = self._clean_text_series(matches, "state")
+                state_matches = matches[state_series.str.lower() == intent.state.lower()]
+                if not state_matches.empty:
+                    matches = state_matches
+            if not matches.empty:
+                return matches.copy(), f"Applied city filter: kept {len(matches)} facilities in {intent.city}."
+
+        if intent.state and "state" in df.columns:
+            state_series = self._clean_text_series(df, "state")
+            matches = df[state_series.str.lower() == intent.state.lower()]
+            if not matches.empty:
+                return matches.copy(), f"Applied state filter: kept {len(matches)} facilities in {intent.state}."
+
+        return df.copy(), "No location filter was applied; ranking used all facilities."
 
     @staticmethod
     def _tfidf_scores(query: str, df: pd.DataFrame) -> np.ndarray:
