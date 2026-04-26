@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from caremap_ai.models import QueryResult, RankedFacility
 from caremap_ai.triage import SymptomTriageAgent, SymptomTriageResult
 from caremap_ai.utils import haversine_km, to_float
 
@@ -118,16 +119,16 @@ class QueryAgent:
                 candidates = candidates[candidates[capability].fillna(False) == True]
 
         if candidates.empty:
-            return {
-                "query": query,
-                "intent": intent.__dict__,
-                "ranked_facilities": [],
-                "reasoning_steps": [
+            return QueryResult(
+                query=query,
+                intent=intent.__dict__,
+                ranked_facilities=[],
+                reasoning_steps=[
                     "Parsed required clinical capabilities.",
                     self._triage_reasoning_step(intent),
                     "No facilities satisfied all deterministic filters.",
                 ],
-            }
+            ).to_dict()
 
         candidates = candidates.assign(_rank_score=candidates.apply(lambda r: self._rank_row(r, intent), axis=1))
         ranked = candidates.sort_values("_rank_score", ascending=False).head(top_k)
@@ -141,36 +142,36 @@ class QueryAgent:
                 except json.JSONDecodeError:
                     evidence = {"raw": [evidence]}
             rows.append(
-                {
-                    "name": row.get("name"),
-                    "state": row.get("state"),
-                    "district_city": row.get("district_city"),
-                    "pin_code": row.get("pin_code"),
-                    "trust_score": int(row.get("trust_score", 0)),
-                    "rank_score": round(float(row.get("_rank_score", 0)), 2),
-                    "contradiction_flags": row.get("contradiction_flags", []),
-                    "evidence": evidence,
-                    "explanation": row.get("explanation", ""),
-                    "symptom_triage": {
+                RankedFacility(
+                    name=row.get("name"),
+                    state=row.get("state"),
+                    district_city=row.get("district_city"),
+                    pin_code=row.get("pin_code"),
+                    trust_score=int(row.get("trust_score", 0)),
+                    rank_score=round(float(row.get("_rank_score", 0)), 2),
+                    contradiction_flags=row.get("contradiction_flags", []),
+                    evidence=evidence,
+                    explanation=row.get("explanation", ""),
+                    symptom_triage={
                         "categories": intent.symptom_categories,
                         "urgency": intent.urgency,
                         "preferred_capabilities": intent.preferred_capabilities,
                         "safety_note": intent.safety_note,
                     },
-                }
+                ).to_dict()
             )
 
-        return {
-            "query": query,
-            "intent": intent.__dict__,
-            "ranked_facilities": rows,
-            "reasoning_steps": [
+        return QueryResult(
+            query=query,
+            intent=intent.__dict__,
+            ranked_facilities=rows,
+            reasoning_steps=[
                 "Parsed intent into required capabilities and geography.",
                 self._triage_reasoning_step(intent),
                 "Retrieved and filtered candidates using extracted structured capabilities.",
                 "Ranked by trust score, explicit capability coverage, symptom-triage capability coverage, distance when available, and contradiction penalties.",
             ],
-        }
+        ).to_dict()
 
     @staticmethod
     def _rank_row(row: pd.Series, intent: ParsedIntent) -> float:

@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from caremap_ai.orchestrator import CareMapAgentPipeline
+from caremap_ai.models import FacilityCapability
 from caremap_ai.triage import SymptomTriageAgent
 
 
@@ -35,3 +36,18 @@ def test_symptom_triage_maps_chest_pain_to_emergency_support():
     assert "availability_24_7" in result.preferred_capabilities
     assert "has_oxygen" in result.preferred_capabilities
     assert result.safety_note is not None
+
+
+def test_facility_capability_model_serializes_core_schema():
+    model = FacilityCapability(
+        name="Example Hospital",
+        state="Bihar",
+        district_city="Patna",
+        pin_code="800001",
+        has_icu=True,
+        doctor_availability="unknown",
+    )
+    data = model.to_dict()
+    assert data["name"] == "Example Hospital"
+    assert data["has_icu"] is True
+    assert "extracted_evidence" in data

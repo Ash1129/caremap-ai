@@ -36,6 +36,8 @@ flowchart LR
 - **Query Agent:** retrieves semantic candidates from Mosaic AI Vector Search, parses intent, filters extracted capabilities, and reranks by trust, distance, explicit capability match, symptom-triage capability match, and contradiction penalties.
 - **Desert Detection Agent:** groups by state, district/city, and PIN code to identify high-risk service gaps.
 
+Structured outputs are validated with Pydantic models in `src/caremap_ai/models.py`, including `FacilityCapability`, `ValidationResult`, `TrustScoreResult`, `QueryResult`, and `MedicalDesertRegion`.
+
 ## Databricks Run Path
 
 1. Upload this repo to Databricks Repos. In your workspace it appears as `/Workspace/Repos/ap2538@cornell.edu/caremap-ai`.

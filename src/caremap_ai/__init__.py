@@ -11,6 +11,7 @@ __all__ = [
     "QueryAgent",
     "DesertDetectionAgent",
     "SymptomTriageAgent",
+    "FacilityCapability",
 ]
 
 
@@ -35,6 +36,10 @@ def __getattr__(name: str):
         from caremap_ai.triage import SymptomTriageAgent
 
         return SymptomTriageAgent
+    if name == "FacilityCapability":
+        from caremap_ai.models import FacilityCapability
+
+        return FacilityCapability
     if name == "DesertDetectionAgent":
         from caremap_ai.desert import DesertDetectionAgent
 

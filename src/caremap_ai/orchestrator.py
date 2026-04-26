@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 from caremap_ai.extraction import ExtractionAgent
+from caremap_ai.models import FacilityAgentResult, FacilityCapability, TrustScoreResult, ValidationResult
 from caremap_ai.scoring import TrustScoringAgent
 from caremap_ai.validation import ValidationAgent
 
@@ -26,10 +27,10 @@ class CareMapAgentPipeline:
         self.scoring_agent = scoring_agent or TrustScoringAgent()
 
     def run_row(self, row: Mapping[str, object]) -> dict[str, object]:
-        extracted = self.extraction_agent.extract(row)
-        validation = self.validation_agent.validate(extracted)
-        scoring = self.scoring_agent.score(row, extracted, validation)
-        return {**extracted, **validation, **scoring}
+        extracted = FacilityCapability(**self.extraction_agent.extract(row)).to_dict()
+        validation = ValidationResult(**self.validation_agent.validate(extracted)).to_dict()
+        scoring = TrustScoreResult(**self.scoring_agent.score(row, extracted, validation)).to_dict()
+        return FacilityAgentResult(**{**extracted, **validation, **scoring}).to_dict()
 
     def run_pandas(self, source: "pd.DataFrame") -> "pd.DataFrame":
         import pandas as pd
