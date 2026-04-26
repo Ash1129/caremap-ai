@@ -7,15 +7,12 @@ import { ChatMessageComponent } from "@/components/ChatMessage";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
 import { HeatMapsView } from "@/components/HeatMapsView";
 import { AnalyticsDashboardView } from "@/components/AnalyticsDashboardView";
-import { MedicalDesertsView } from "@/components/MedicalDesertsView";
 
 // ── Nav tab definitions ───────────────────────────────────────────────────────
 const NAV_TABS = [
-  { label: "Search",          emoji: "🔍" },
-  { label: "Results",         emoji: "📋" },
-  { label: "Heat Maps",       emoji: "🗺️" },
-  { label: "Medical Deserts", emoji: "⚠️" },
-  { label: "Analytics",       emoji: "📊" },
+  { label: "Search" },
+  { label: "Map" },
+  { label: "Analytics" },
 ];
 
 const DEMO_QUERIES = [
@@ -45,12 +42,11 @@ export default function Home() {
   const currentConv = conversations.find((c) => c.id === currentConvId) ?? null;
   const messages = currentConv?.messages ?? [];
   const inChat = messages.length > 0 || !!pendingUserContent;
-  const derivedTab = inChat ? "Results" : "Search";
-  const activeTab = manualTab ?? derivedTab;
+  const activeTab = manualTab ?? "Search";
 
-  // Only show Search + Results for patients; all tabs for institution
+  // Patients only see Search; institution sees all tabs
   const visibleTabs = userMode === "patient"
-    ? NAV_TABS.filter((t) => t.label === "Search" || t.label === "Results")
+    ? NAV_TABS.filter((t) => t.label === "Search")
     : NAV_TABS;
 
   useEffect(() => {
@@ -70,7 +66,6 @@ export default function Home() {
     setInput("");
     setPendingUserContent(null);
     setManualTab(null);
-    setUserMode(null);
     liveConvIdRef.current = null;
   };
 
@@ -186,15 +181,15 @@ export default function Home() {
     <div className="flex flex-col h-screen overflow-hidden">
 
       {/* ── Top nav bar ─────────────────────────────────────────────────────── */}
-      <header style={{ background: "var(--bg-nav)", flexShrink: 0 }}>
+      {userMode !== null && <header style={{ background: "var(--bg-nav)", flexShrink: 0 }}>
         <div className="flex items-center h-16 px-6 gap-6">
 
           {/* Logo */}
-          <div className="flex items-center gap-2.5 flex-shrink-0">
-            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center"
-              style={{ background: "var(--accent)" }}>
-              <span className="text-white font-bold text-sm">C</span>
-            </div>
+          <button
+            onClick={() => { setUserMode(null); setManualTab(null); }}
+            className="flex items-center gap-2.5 flex-shrink-0 transition-opacity hover:opacity-80 text-left"
+          >
+            <img src="/caremap_logo.png" alt="CareMap India" className="w-16 h-16 object-contain" />
             <div>
               <div className="text-white font-bold text-sm leading-tight">CareMap India</div>
               <div className="text-xs leading-tight tracking-widest uppercase"
@@ -202,15 +197,14 @@ export default function Home() {
                 Healthcare Intelligence Platform
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Nav tabs */}
           <nav className="flex-1 flex items-center justify-center gap-1">
-            {visibleTabs.map((tab) => {
+            {userMode === "institution" && visibleTabs.map((tab) => {
               const isActive = tab.label === activeTab;
               const handleTabClick = () => {
                 if (tab.label === "Search") { newChat(); }
-                else if (tab.label === "Results") { setManualTab(null); }
                 else { setManualTab(tab.label); }
               };
               return (
@@ -220,7 +214,6 @@ export default function Home() {
                   className="flex items-center gap-1.5 px-4 h-16 text-sm font-medium transition-colors relative"
                   style={{ color: isActive ? "var(--text-nav-active)" : "var(--text-nav)" }}
                 >
-                  <span>{tab.emoji}</span>
                   <span>{tab.label}</span>
                   {isActive && (
                     <span
@@ -237,29 +230,17 @@ export default function Home() {
           <div className="flex items-center gap-3 flex-shrink-0">
             <span className="text-xs flex items-center gap-1.5" style={{ color: "var(--text-nav)" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              10,247 facilities indexed
+              10,000 facilities indexed
             </span>
-            <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
-              style={{ borderColor: "#3a5168", color: "var(--text-nav)" }}
-            >
-              📋 Institution
-            </button>
-            <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
-              style={{ borderColor: "#3a5168", color: "var(--text-nav)" }}
-            >
-              ← Back to Login
-            </button>
           </div>
         </div>
-      </header>
+      </header>}
 
       {/* ── Content area ────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden" style={{ background: "var(--bg)" }}>
 
         {/* Sidebar — only visible when there are conversations */}
-        {conversations.length > 0 && (
+        {conversations.length > 0 && activeTab === "Search" && userMode !== null && (
           <aside
             className="w-56 flex-shrink-0 flex flex-col border-r"
             style={{ background: "var(--bg-sidebar)", borderColor: "var(--border)" }}
@@ -310,11 +291,10 @@ export default function Home() {
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
           {/* Standalone tabs */}
-          {activeTab === "Heat Maps" && <HeatMapsView />}
+          {activeTab === "Map" && <HeatMapsView />}
           {activeTab === "Analytics" && <AnalyticsDashboardView />}
-          {activeTab === "Medical Deserts" && <MedicalDesertsView />}
 
-          {activeTab !== "Heat Maps" && activeTab !== "Analytics" && activeTab !== "Medical Deserts" && (userMode === null ? (
+          {activeTab !== "Map" && activeTab !== "Analytics" && (userMode === null ? (
             /* ── Hero landing page ── */
             <div
               className="flex-1 relative flex flex-col justify-center"
@@ -356,7 +336,7 @@ export default function Home() {
                 <div className="space-y-3">
                   {/* Patient */}
                   <button
-                    onClick={() => { setUserMode("patient"); setManualTab(null); }}
+                    onClick={() => { setUserMode("patient"); setManualTab(null); setConversations([]); setCurrentConvId(null); setPendingUserContent(null); setInput(""); }}
                     className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all group"
                     style={{
                       background: "rgba(255,255,255,0.08)",
@@ -366,12 +346,6 @@ export default function Home() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                   >
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ background: "rgba(255,255,255,0.12)" }}
-                    >
-                      <span className="text-lg">👤</span>
-                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white">Sign in as Patient</p>
                       <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>
@@ -383,7 +357,7 @@ export default function Home() {
 
                   {/* Institution */}
                   <button
-                    onClick={() => { setUserMode("institution"); setManualTab(null); }}
+                    onClick={() => { setUserMode("institution"); setManualTab(null); setConversations([]); setCurrentConvId(null); setPendingUserContent(null); setInput(""); }}
                     className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all group"
                     style={{
                       background: "rgba(255,255,255,0.08)",
@@ -393,12 +367,6 @@ export default function Home() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                   >
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ background: "rgba(255,255,255,0.12)" }}
-                    >
-                      <span className="text-lg">🏥</span>
-                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white">Sign in as Institution</p>
                       <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>
@@ -481,11 +449,12 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
                 {messages.map((msg) => (
-                  <ChatMessageComponent key={msg.id} message={msg} onSuggest={handleSuggest} />
+                  <ChatMessageComponent key={msg.id} message={msg} onSuggest={handleSuggest} userMode={userMode} />
                 ))}
                 {pendingUserContent && (
                   <ChatMessageComponent
                     message={{ id: "__pending__", role: "user", content: pendingUserContent, timestamp: new Date() }}
+                    userMode={userMode}
                   />
                 )}
                 {isLoading && <ThinkingIndicator status={currentStatus} />}
@@ -495,7 +464,7 @@ export default function Home() {
           ))}
 
           {/* ── Input bar (chat mode only, not on map tabs) ─────────────────── */}
-          {inChat && activeTab !== "Heat Maps" && activeTab !== "Analytics" && activeTab !== "Medical Deserts" && (
+          {inChat && activeTab !== "Map" && activeTab !== "Analytics" && userMode !== null && (
             <div
               className="flex-shrink-0 px-6 py-4 border-t"
               style={{ borderColor: "var(--border)", background: "var(--bg)" }}

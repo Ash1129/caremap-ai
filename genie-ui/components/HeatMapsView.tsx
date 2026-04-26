@@ -4,32 +4,16 @@ import { useState } from "react";
 
 const MAP_LAYERS = [
   {
-    key: "facility",
-    label: "Facility Heatmap",
-    emoji: "🏥",
-    description: "Density of healthcare facilities across India",
-    src: "/maps/map1_facility_heatmap.html",
-  },
-  {
-    key: "population",
-    label: "Population Overlay",
-    emoji: "👥",
-    description: "Population distribution vs. facility coverage",
-    src: "/maps/map2_population_overlay.html",
-  },
-  {
-    key: "underserved",
-    label: "Underserved Areas",
-    emoji: "⚠️",
-    description: "Districts with insufficient healthcare access",
-    src: "/maps/map3_underserved.html",
-  },
-  {
     key: "specialty",
-    label: "Specialty Points",
-    emoji: "🔬",
+    label: "Public Health Intelligence",
     description: "Specialist facility locations by type",
     src: "/maps/map5_specialty_points.html",
+  },
+  {
+    key: "supplier",
+    label: "Business Intelligence",
+    description: "Supplier coverage radius across regions",
+    src: "/maps/map6_supplier_radius.html",
   },
 ];
 
@@ -61,7 +45,6 @@ export function HeatMapsView() {
                   fontWeight: isActive ? 600 : 400,
                 }}
               >
-                <span>{layer.emoji}</span>
                 <span>{layer.label}</span>
               </button>
             );

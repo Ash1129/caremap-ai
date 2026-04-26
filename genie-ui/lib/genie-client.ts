@@ -21,6 +21,23 @@ function url(path: string): string {
   return `${HOST}/api/2.0/genie/spaces/${SPACE_ID}${path}`;
 }
 
+async function reqRaw<T>(fullUrl: string, method: "GET" | "POST", body?: object): Promise<T> {
+  const res = await fetch(fullUrl, {
+    method,
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Databricks API ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 async function req<T>(endpoint: string, method: "GET" | "POST", body?: object): Promise<T> {
   const res = await fetch(url(endpoint), {
     method,
@@ -91,19 +108,25 @@ export async function getMessage(
 
 // ── Query results ─────────────────────────────────────────────────────────────
 
+interface RawChunk {
+  data_array?: string[][];
+  row_count?: number;
+  chunk_index?: number;
+}
+
 interface RawQueryResult {
   statement_response?: {
+    statement_id?: string;
     status?: { state: string };
     manifest?: {
       schema?: {
         columns?: Array<{ name: string; type_name: string; position: number }>;
       };
       truncated?: boolean;
+      total_row_count?: number;
+      total_chunk_count?: number;
     };
-    result?: {
-      data_array?: string[][];
-      row_count?: number;
-    };
+    result?: RawChunk;
   };
 }
 
@@ -121,10 +144,31 @@ export async function getQueryResult(
   const sr = raw.statement_response;
   if (!sr?.result || !sr?.manifest?.schema?.columns) return null;
 
+  const columns = sr.manifest.schema.columns;
+  let rows: string[][] = sr.result.data_array ?? [];
+  const totalChunks = sr.manifest.total_chunk_count ?? 1;
+  const statementId = sr.statement_id;
+
+  // Fetch remaining chunks if the result is paginated
+  if (totalChunks > 1 && statementId) {
+    for (let i = 1; i < totalChunks; i++) {
+      try {
+        const chunk = await reqRaw<RawChunk>(
+          `${HOST}/api/2.0/sql/statements/${statementId}/result/chunks/${i}`,
+          "GET"
+        );
+        if (chunk.data_array) rows = [...rows, ...chunk.data_array];
+      } catch {
+        // Non-fatal: return what we have so far
+        break;
+      }
+    }
+  }
+
   return {
-    columns: sr.manifest.schema.columns,
-    rows: sr.result.data_array ?? [],
-    row_count: sr.result.row_count ?? 0,
+    columns,
+    rows,
+    row_count: sr.manifest.total_row_count ?? rows.length,
     truncated: sr.manifest.truncated ?? false,
   };
 }

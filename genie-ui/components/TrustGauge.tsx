@@ -3,9 +3,10 @@
 interface Props {
   score: number;
   size?: "sm" | "md";
+  onClick?: () => void;
 }
 
-export function TrustGauge({ score, size = "md" }: Props) {
+export function TrustGauge({ score, size = "md", onClick }: Props) {
   const r = size === "sm" ? 28 : 36;
   const cx = size === "sm" ? 32 : 40;
   const viewBox = size === "sm" ? "0 0 64 64" : "0 0 80 80";
@@ -23,7 +24,11 @@ export function TrustGauge({ score, size = "md" }: Props) {
     clampedScore >= 70 ? "High Trust" : clampedScore >= 45 ? "Med Trust" : "Low Trust";
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div
+      className={`flex flex-col items-center gap-1 ${onClick ? "cursor-pointer" : ""}`}
+      onClick={onClick}
+      title={onClick ? "Click to see gap analysis" : undefined}
+    >
       <div className={`relative ${dim}`}>
         <svg viewBox={viewBox} className="w-full h-full -rotate-90">
           {/* Track */}

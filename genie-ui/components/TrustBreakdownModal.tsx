@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Phone, Mail, Globe, MapPin } from "lucide-react";
 import { TrustGauge } from "./TrustGauge";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -171,6 +171,9 @@ export function TrustBreakdownModal({ facility, onClose }: Props) {
         {/* ── White body ──────────────────────────────────────────────────── */}
         <div className="px-7 py-6 space-y-8">
 
+          {/* Contact & Location */}
+          <ContactSection facility={facility} />
+
           {/* Component scores */}
           <section>
             <h3 className="text-lg font-bold mb-5" style={{ color: "var(--text-primary)" }}>
@@ -224,6 +227,98 @@ export function TrustBreakdownModal({ facility, onClose }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Contact & Location section ────────────────────────────────────────────────
+
+function ContactSection({ facility }: { facility: ModalFacility }) {
+  const r = facility.raw;
+
+  const addressParts = [
+    r["address_line1"] || r["full_address"] || r["address"],
+    r["address_line2"],
+    r["address_city"] || r["district_city"] || r["city"],
+    r["address_stateorregion"] || r["state"],
+    r["address_ziporpostcode"] || r["pin_code"] || r["zip"],
+  ].filter(Boolean);
+  const fullAddress = addressParts.join(", ");
+  const mapsUrl = fullAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
+    : null;
+
+  const phone   = r["phone"] || r["phone_number"] || r["contact_number"] || r["mobile"] || r["contact"] || "";
+  const email   = r["email"] || r["email_address"] || "";
+  const website = r["website"] || r["website_url"] || r["url"] || "";
+
+  const hasAny = fullAddress || phone || email || website;
+  if (!hasAny) return null;
+
+  return (
+    <section>
+      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--text-primary)" }}>
+        Contact &amp; Location
+      </h3>
+      <div className="space-y-3">
+        {fullAddress && (
+          <div className="flex items-start gap-3 p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid var(--border)" }}>
+            <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "var(--accent)" }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm" style={{ color: "var(--text-primary)" }}>{fullAddress}</p>
+              {mapsUrl && (
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-semibold mt-1 inline-block"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Open in Google Maps →
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+        {phone && (
+          <a
+            href={`tel:${phone.replace(/\s+/g, "")}`}
+            className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+            style={{ background: "#f8fafc", border: "1px solid var(--border)", textDecoration: "none" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#f8fafc")}
+          >
+            <Phone className="w-4 h-4 flex-shrink-0" style={{ color: "var(--accent)" }} />
+            <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{phone}</span>
+          </a>
+        )}
+        {email && (
+          <a
+            href={`mailto:${email}`}
+            className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+            style={{ background: "#f8fafc", border: "1px solid var(--border)", textDecoration: "none" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+          >
+            <Mail className="w-4 h-4 flex-shrink-0" style={{ color: "var(--accent)" }} />
+            <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{email}</span>
+          </a>
+        )}
+        {website && (
+          <a
+            href={website.startsWith("http") ? website : `https://${website}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+            style={{ background: "#f8fafc", border: "1px solid var(--border)", textDecoration: "none" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#f8fafc")}
+          >
+            <Globe className="w-4 h-4 flex-shrink-0" style={{ color: "var(--accent)" }} />
+            <span className="text-sm font-medium" style={{ color: "var(--accent)" }}>{website}</span>
+          </a>
+        )}
+      </div>
+    </section>
   );
 }
 

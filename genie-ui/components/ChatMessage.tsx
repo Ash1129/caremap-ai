@@ -9,9 +9,10 @@ import { FacilityResultsView, isFacilityResult } from "./FacilityResultsView";
 interface Props {
   message: ChatMessage;
   onSuggest?: (q: string) => void;
+  userMode?: "patient" | "institution" | null;
 }
 
-export function ChatMessageComponent({ message, onSuggest }: Props) {
+export function ChatMessageComponent({ message, onSuggest, userMode }: Props) {
 
   /* ── User message ─────────────────────────────────────────────────────── */
   if (message.role === "user") {
@@ -111,7 +112,7 @@ export function ChatMessageComponent({ message, onSuggest }: Props) {
         {/* Query results — rich cards for facility data, plain table otherwise */}
         {message.queryResult && message.queryResult.rows.length > 0 && (
           isFacilityResult(message.queryResult)
-            ? <FacilityResultsView result={message.queryResult} />
+            ? <FacilityResultsView result={message.queryResult} userMode={userMode} />
             : <DataTable result={message.queryResult} />
         )}
 
