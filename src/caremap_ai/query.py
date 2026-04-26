@@ -1,17 +1,21 @@
-"""Natural language query agent with local and Databricks retrieval hooks."""
+"""Natural language query agent with semantic retrieval and soft capability scoring."""
 
 from __future__ import annotations
 
 import re
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from caremap_ai.models import QueryResult, RankedFacility
 from caremap_ai.triage import SymptomTriageAgent, SymptomTriageResult
 from caremap_ai.utils import haversine_km, to_float
+
+logger = logging.getLogger(__name__)
 
 
 QUERY_CAPABILITY_PATTERNS = {
@@ -76,9 +80,15 @@ class ParsedIntent:
 
 
 class QueryAgent:
-    def __init__(self, facilities: pd.DataFrame, symptom_triage_agent: SymptomTriageAgent | None = None):
+    def __init__(
+        self,
+        facilities: pd.DataFrame,
+        symptom_triage_agent: SymptomTriageAgent | None = None,
+        semantic_retriever=None,
+    ):
         self.facilities = facilities.copy()
         self.symptom_triage_agent = symptom_triage_agent or SymptomTriageAgent()
+        self.semantic_retriever = semantic_retriever  # OpenAISemanticRetriever or LocalVectorFallback
 
     def parse_intent(self, query: str) -> ParsedIntent:
         lower = query.lower()
@@ -111,26 +121,36 @@ class QueryAgent:
         intent = self.parse_intent(query)
         candidates = self.facilities.copy()
 
-        if intent.state and "state" in candidates:
-            candidates = candidates[candidates["state"].str.lower() == intent.state.lower()]
+        # Soft state filter: prefer matches but don't drop non-matching rows entirely
+        # when a retriever is present (it may surface relevant cross-state results).
+        retrieval_note: str
+        if self.semantic_retriever is not None:
+            try:
+                scores = self.semantic_retriever.scores_for_query(query)
+                # scores is aligned with self.facilities; reindex onto candidates
+                candidates["_semantic_score"] = scores[: len(candidates)]
+                retrieval_note = (
+                    f"Semantic retriever scored all {len(candidates)} facilities; "
+                    "no candidates were hard-filtered."
+                )
+            except Exception as exc:
+                logger.warning("Semantic retriever failed (%s); falling back to TF-IDF.", exc)
+                candidates["_semantic_score"] = self._tfidf_scores(query, candidates)
+                retrieval_note = "Semantic retrieval failed; used TF-IDF fallback."
+        else:
+            candidates["_semantic_score"] = self._tfidf_scores(query, candidates)
+            retrieval_note = "No semantic retriever configured; used TF-IDF for retrieval scores."
 
-        for capability in intent.capabilities:
-            if capability in candidates:
-                candidates = candidates[candidates[capability].fillna(False) == True]
+        # Soft geography signal: apply a state match bonus rather than a hard filter
+        if intent.state and "state" in candidates.columns:
+            state_match = candidates["state"].str.lower() == intent.state.lower()
+            candidates["_state_bonus"] = state_match.astype(float) * 15.0
+        else:
+            candidates["_state_bonus"] = 0.0
 
-        if candidates.empty:
-            return QueryResult(
-                query=query,
-                intent=intent.__dict__,
-                ranked_facilities=[],
-                reasoning_steps=[
-                    "Parsed required clinical capabilities.",
-                    self._triage_reasoning_step(intent),
-                    "No facilities satisfied all deterministic filters.",
-                ],
-            ).to_dict()
-
-        candidates = candidates.assign(_rank_score=candidates.apply(lambda r: self._rank_row(r, intent), axis=1))
+        candidates = candidates.assign(
+            _rank_score=candidates.apply(lambda r: self._rank_row(r, intent), axis=1)
+        )
         ranked = candidates.sort_values("_rank_score", ascending=False).head(top_k)
 
         rows = []
@@ -161,32 +181,56 @@ class QueryAgent:
                 ).to_dict()
             )
 
+        cap_note = (
+            f"Capabilities {intent.capabilities} used as soft scoring signals (not hard filters); "
+            "facilities missing some capabilities are still surfaced with lower scores."
+        ) if intent.capabilities else "No specific capabilities detected from query."
+
         return QueryResult(
             query=query,
             intent=intent.__dict__,
             ranked_facilities=rows,
             reasoning_steps=[
-                "Parsed intent into required capabilities and geography.",
+                "Parsed intent into capabilities and geography.",
                 self._triage_reasoning_step(intent),
-                "Retrieved and filtered candidates using extracted structured capabilities.",
-                "Ranked by trust score, explicit capability coverage, symptom-triage capability coverage, distance when available, and contradiction penalties.",
+                retrieval_note,
+                cap_note,
+                "Final rank = trust score + semantic similarity + capability/triage bonuses + geography bonus − contradiction penalty − distance penalty.",
             ],
         ).to_dict()
 
     @staticmethod
     def _rank_row(row: pd.Series, intent: ParsedIntent) -> float:
         trust = float(row.get("trust_score") or 0)
-        match_bonus = 6 * sum(bool(row.get(field)) for field in intent.capabilities)
-        triage_bonus = 4 * sum(bool(row.get(field)) for field in intent.preferred_capabilities)
+        # Capability match: bonus per matched capability (soft — missing ones just score 0)
+        match_bonus = 6.0 * sum(bool(row.get(field)) for field in intent.capabilities)
+        triage_bonus = 4.0 * sum(bool(row.get(field)) for field in intent.preferred_capabilities)
+        # Semantic similarity scaled to the same range as trust (0–100)
+        semantic_score = float(row.get("_semantic_score") or 0.0) * 40.0
+        # Geography
+        state_bonus = float(row.get("_state_bonus") or 0.0)
         contradictions = row.get("contradiction_flags") or []
-        contradiction_penalty = 8 * len(contradictions)
+        contradiction_penalty = 8.0 * len(contradictions)
         distance_penalty = 0.0
         if intent.latitude is not None and intent.longitude is not None:
             lat = to_float(row.get("latitude"))
             lon = to_float(row.get("longitude"))
             if lat is not None and lon is not None:
                 distance_penalty = min(30.0, haversine_km(intent.latitude, intent.longitude, lat, lon) / 15.0)
-        return trust + match_bonus + triage_bonus - contradiction_penalty - distance_penalty
+        return trust + semantic_score + match_bonus + triage_bonus + state_bonus - contradiction_penalty - distance_penalty
+
+    @staticmethod
+    def _tfidf_scores(query: str, df: pd.DataFrame) -> np.ndarray:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+
+        corpus = df["embedding_text"].fillna("").tolist()
+        if not any(corpus):
+            return np.zeros(len(corpus))
+        vectorizer = TfidfVectorizer(stop_words="english")
+        matrix = vectorizer.fit_transform(corpus + [query])
+        scores = cos_sim(matrix[-1], matrix[:-1]).flatten()
+        return scores
 
     @staticmethod
     def _dedupe(values: list[str]) -> list[str]:

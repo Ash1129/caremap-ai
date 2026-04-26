@@ -2,26 +2,24 @@
 # MAGIC %md
 # MAGIC # CareMap AI - 04 Query Agent
 # MAGIC
-# MAGIC Accepts complex natural-language questions, retrieves semantic candidates from Mosaic AI
-# MAGIC Vector Search, filters/reranks by extracted capabilities, and returns evidence.
+# MAGIC Accepts complex natural-language questions and retrieves relevant facilities using
+# MAGIC OpenAI semantic embeddings (`text-embedding-3-small`). Capabilities and geography
+# MAGIC are used as soft scoring signals — no candidates are hard-filtered out.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog catalog")
 dbutils.widgets.text("schema", "caremap_ai", "Unity Catalog schema")
 dbutils.widgets.text("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support", "Natural language query")
-dbutils.widgets.text("vector_endpoint", "caremap-vector-endpoint", "Mosaic Vector Search endpoint")
-dbutils.widgets.text("vector_top_k", "100", "Number of semantic candidates to retrieve")
-dbutils.widgets.dropdown("use_vector_search", "true", ["true", "false"], "Use Mosaic AI Vector Search")
+dbutils.widgets.text("openai_api_key", "", "OpenAI API key (leave blank to read from env/secret)")
+dbutils.widgets.text("top_k", "10", "Number of results to return")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 query = dbutils.widgets.get("query")
-vector_endpoint = dbutils.widgets.get("vector_endpoint")
-vector_top_k = int(dbutils.widgets.get("vector_top_k"))
-use_vector_search = dbutils.widgets.get("use_vector_search").lower() == "true"
+openai_api_key = dbutils.widgets.get("openai_api_key") or None
+top_k = int(dbutils.widgets.get("top_k"))
 capability_table = f"{catalog}.{schema}.facility_capabilities"
-index_name = f"{catalog}.{schema}.facility_capabilities_index"
 
 # COMMAND ----------
 
@@ -35,6 +33,7 @@ if repo_src not in sys.path:
 
 from caremap_ai.mlflow_utils import setup_mlflow, trace_span
 from caremap_ai.query import QueryAgent
+from caremap_ai.vector_search import OpenAISemanticRetriever
 
 # COMMAND ----------
 
@@ -67,60 +66,19 @@ def normalize_list_value(value):
 if "contradiction_flags" in facilities.columns:
     facilities["contradiction_flags"] = facilities["contradiction_flags"].apply(normalize_list_value)
 
+# COMMAND ----------
 
-def extract_vector_rows(search_results):
-    """Normalize Vector Search SDK results across response shapes."""
-    if isinstance(search_results, dict):
-        result = search_results.get("result", search_results)
-        data = result.get("data_array", result.get("data", []))
-        columns = result.get("columns", [])
-        column_names = [col.get("name", col) if isinstance(col, dict) else col for col in columns]
-        if column_names and data:
-            return [dict(zip(column_names, row)) for row in data]
-        return data if isinstance(data, list) else []
-    if hasattr(search_results, "get"):
-        return extract_vector_rows(dict(search_results))
-    return []
-
-
-def retrieve_vector_candidates(query_text, top_k=100):
-    from databricks.vector_search.client import VectorSearchClient
-
-    client = VectorSearchClient(disable_notice=True)
-    index = client.get_index(endpoint_name=vector_endpoint, index_name=index_name)
-    results = index.similarity_search(
-        query_text=query_text,
-        columns=["facility_id", "name", "state", "district_city", "trust_score"],
-        num_results=top_k,
-    )
-    rows = extract_vector_rows(results)
-    candidate_ids = [str(row.get("facility_id")) for row in rows if isinstance(row, dict) and row.get("facility_id") is not None]
-    return list(dict.fromkeys(candidate_ids))
-
-
-candidate_ids = []
-retrieval_note = "Vector Search disabled; Query Agent used all facility rows."
-if use_vector_search:
-    try:
-        candidate_ids = retrieve_vector_candidates(query, top_k=vector_top_k)
-        retrieval_note = f"Vector Search retrieved {len(candidate_ids)} semantic candidates from {index_name}."
-    except Exception as exc:
-        retrieval_note = f"Vector Search failed ({type(exc).__name__}: {exc}); Query Agent fell back to all facility rows."
-
-if candidate_ids and "facility_id" in facilities.columns:
-    candidate_facilities = facilities[facilities["facility_id"].astype(str).isin(candidate_ids)].copy()
-else:
-    candidate_facilities = facilities.copy()
-
-agent = QueryAgent(candidate_facilities)
+# Build the semantic retriever once — embeddings are cached on the object so
+# subsequent queries in this session don't re-embed the full dataset.
+retriever = OpenAISemanticRetriever(facilities=facilities, api_key=openai_api_key)
+agent = QueryAgent(facilities, semantic_retriever=retriever)
 
 with mlflow.start_run(run_name="caremap_query_agent"):
     with trace_span("query_agent", query=query):
-        answer = agent.answer(query, top_k=10)
+        answer = agent.answer(query, top_k=top_k)
 
-answer["reasoning_steps"].insert(0, retrieval_note)
 display(answer["ranked_facilities"])
-print(answer["reasoning_steps"])
+print("\n".join(answer["reasoning_steps"]))
 
 # COMMAND ----------
 
@@ -135,14 +93,5 @@ sample_queries = [
 
 for sample in sample_queries:
     print("\nQUERY:", sample)
-    sample_candidate_ids = []
-    if use_vector_search:
-        try:
-            sample_candidate_ids = retrieve_vector_candidates(sample, top_k=vector_top_k)
-        except Exception as exc:
-            print(f"Vector Search fallback for sample query: {type(exc).__name__}: {exc}")
-    if sample_candidate_ids and "facility_id" in facilities.columns:
-        sample_facilities = facilities[facilities["facility_id"].astype(str).isin(sample_candidate_ids)].copy()
-    else:
-        sample_facilities = facilities.copy()
-    print(QueryAgent(sample_facilities).answer(sample, top_k=3)["ranked_facilities"])
+    # Re-use the same retriever — embedding matrix is already built
+    print(QueryAgent(facilities, semantic_retriever=retriever).answer(sample, top_k=3)["ranked_facilities"])
