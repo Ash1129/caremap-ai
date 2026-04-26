@@ -8,6 +8,8 @@
 
 # COMMAND ----------
 
+dbutils.widgets.removeAll()
+
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog catalog")
 dbutils.widgets.text("schema", "caremap_ai", "Unity Catalog schema")
 dbutils.widgets.text("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support", "Natural language query")
@@ -18,7 +20,10 @@ catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 query = dbutils.widgets.get("query")
 openai_api_key = dbutils.widgets.get("openai_api_key") or None
-top_k = int(dbutils.widgets.get("top_k"))
+try:
+    top_k = int(dbutils.widgets.get("top_k"))
+except (ValueError, TypeError):
+    top_k = 10
 capability_table = f"{catalog}.{schema}.facility_capabilities"
 
 # COMMAND ----------
