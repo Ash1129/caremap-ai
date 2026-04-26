@@ -75,6 +75,7 @@ class ParsedIntent:
     safety_note: str | None = None
     state: str | None = None
     city: str | None = None
+    pin_code: str | None = None
     latitude: float | None = None
     longitude: float | None = None
 
@@ -120,6 +121,7 @@ class QueryAgent:
     def answer(self, query: str, top_k: int = 5) -> dict[str, Any]:
         intent = self.parse_intent(query)
         candidates = self.facilities.copy()
+        self._infer_location_from_facilities(query, intent, candidates)
 
         # Soft state filter: prefer matches but don't drop non-matching rows entirely
         # when a retriever is present (it may surface relevant cross-state results).
@@ -143,10 +145,22 @@ class QueryAgent:
 
         # Soft geography signal: apply a state match bonus rather than a hard filter
         if intent.state and "state" in candidates.columns:
-            state_match = candidates["state"].str.lower() == intent.state.lower()
+            state_match = candidates["state"].fillna("").astype(str).str.lower() == intent.state.lower()
             candidates["_state_bonus"] = state_match.astype(float) * 15.0
         else:
             candidates["_state_bonus"] = 0.0
+
+        if intent.city and "district_city" in candidates.columns:
+            city_match = candidates["district_city"].fillna("").astype(str).str.lower() == intent.city.lower()
+            candidates["_city_bonus"] = city_match.astype(float) * 35.0
+        else:
+            candidates["_city_bonus"] = 0.0
+
+        if intent.pin_code and "pin_code" in candidates.columns:
+            pin_match = candidates["pin_code"].fillna("").astype(str).str.lower() == intent.pin_code.lower()
+            candidates["_pin_bonus"] = pin_match.astype(float) * 45.0
+        else:
+            candidates["_pin_bonus"] = 0.0
 
         candidates = candidates.assign(
             _rank_score=candidates.apply(lambda r: self._rank_row(r, intent), axis=1)
@@ -192,10 +206,11 @@ class QueryAgent:
             ranked_facilities=rows,
             reasoning_steps=[
                 "Parsed intent into capabilities and geography.",
+                self._location_reasoning_step(intent),
                 self._triage_reasoning_step(intent),
                 retrieval_note,
                 cap_note,
-                "Final rank = trust score + semantic similarity + capability/triage bonuses + geography bonus − contradiction penalty − distance penalty.",
+                "Final rank = trust score + semantic similarity + capability/triage bonuses + city/state/PIN bonuses − contradiction penalty − distance penalty.",
             ],
         ).to_dict()
 
@@ -209,6 +224,8 @@ class QueryAgent:
         semantic_score = float(row.get("_semantic_score") or 0.0) * 40.0
         # Geography
         state_bonus = float(row.get("_state_bonus") or 0.0)
+        city_bonus = float(row.get("_city_bonus") or 0.0)
+        pin_bonus = float(row.get("_pin_bonus") or 0.0)
         contradictions = row.get("contradiction_flags") or []
         contradiction_penalty = 8.0 * len(contradictions)
         distance_penalty = 0.0
@@ -217,7 +234,81 @@ class QueryAgent:
             lon = to_float(row.get("longitude"))
             if lat is not None and lon is not None:
                 distance_penalty = min(30.0, haversine_km(intent.latitude, intent.longitude, lat, lon) / 15.0)
-        return trust + semantic_score + match_bonus + triage_bonus + state_bonus - contradiction_penalty - distance_penalty
+        return (
+            trust
+            + semantic_score
+            + match_bonus
+            + triage_bonus
+            + state_bonus
+            + city_bonus
+            + pin_bonus
+            - contradiction_penalty
+            - distance_penalty
+        )
+
+    @staticmethod
+    def _clean_text_series(df: pd.DataFrame, column: str) -> pd.Series:
+        if column not in df.columns:
+            return pd.Series([""] * len(df), index=df.index)
+        return df[column].fillna("").astype(str).str.strip()
+
+    def _infer_location_from_facilities(self, query: str, intent: ParsedIntent, df: pd.DataFrame) -> None:
+        """Map place names in the query to facility city/PIN metadata.
+
+        The agent only receives text, not a geocoder. This method uses the
+        already-governed facility table as a lightweight gazetteer so queries
+        like "chest pain in Thrissur" can still receive geography-aware ranking.
+        """
+
+        lower = query.lower()
+        pin_match = re.search(r"\b\d{6}\b", query)
+        if pin_match:
+            intent.pin_code = pin_match.group(0)
+
+        city_series = self._clean_text_series(df, "district_city")
+        state_series = self._clean_text_series(df, "state")
+        pin_series = self._clean_text_series(df, "pin_code")
+
+        if intent.pin_code:
+            pin_rows = df[pin_series == intent.pin_code]
+            if not pin_rows.empty:
+                if not intent.city and "district_city" in pin_rows.columns:
+                    intent.city = str(pin_rows["district_city"].dropna().astype(str).mode().iloc[0])
+                if not intent.state and "state" in pin_rows.columns:
+                    intent.state = str(pin_rows["state"].dropna().astype(str).mode().iloc[0])
+
+        if not intent.city and "district_city" in df.columns:
+            cities = [
+                city
+                for city in city_series.dropna().unique().tolist()
+                if len(city) >= 3 and city.lower() not in {"unknown", "nan", "none"}
+            ]
+            for city in sorted(cities, key=len, reverse=True):
+                if re.search(rf"(?<!\w){re.escape(city.lower())}(?!\w)", lower):
+                    intent.city = city
+                    city_rows = df[city_series.str.lower() == city.lower()]
+                    if not intent.state and not city_rows.empty and "state" in city_rows.columns:
+                        states = city_rows["state"].dropna().astype(str)
+                        if not states.empty:
+                            intent.state = str(states.mode().iloc[0])
+                    break
+
+        geo_rows = pd.DataFrame()
+        if intent.pin_code:
+            geo_rows = df[pin_series == intent.pin_code]
+        if geo_rows.empty and intent.city:
+            geo_rows = df[city_series.str.lower() == intent.city.lower()]
+            if intent.state and not geo_rows.empty:
+                same_state = geo_rows[state_series.loc[geo_rows.index].str.lower() == intent.state.lower()]
+                if not same_state.empty:
+                    geo_rows = same_state
+
+        if (intent.latitude is None or intent.longitude is None) and not geo_rows.empty:
+            latitudes = geo_rows["latitude"].map(to_float).dropna() if "latitude" in geo_rows.columns else pd.Series(dtype=float)
+            longitudes = geo_rows["longitude"].map(to_float).dropna() if "longitude" in geo_rows.columns else pd.Series(dtype=float)
+            if not latitudes.empty and not longitudes.empty:
+                intent.latitude = float(latitudes.median())
+                intent.longitude = float(longitudes.median())
 
     @staticmethod
     def _tfidf_scores(query: str, df: pd.DataFrame) -> np.ndarray:
@@ -245,3 +336,18 @@ class QueryAgent:
             f"{intent.symptom_categories} with urgency '{intent.urgency}' and preferred capabilities "
             f"{intent.preferred_capabilities}. {intent.safety_note}"
         )
+
+    @staticmethod
+    def _location_reasoning_step(intent: ParsedIntent) -> str:
+        parts = []
+        if intent.city:
+            parts.append(f"city={intent.city}")
+        if intent.state:
+            parts.append(f"state={intent.state}")
+        if intent.pin_code:
+            parts.append(f"PIN={intent.pin_code}")
+        if intent.latitude is not None and intent.longitude is not None:
+            parts.append(f"distance origin=({intent.latitude:.4f}, {intent.longitude:.4f})")
+        if not parts:
+            return "No city, state, PIN, or coordinate location was detected; distance was not applied."
+        return "Location inference: " + ", ".join(parts) + "."

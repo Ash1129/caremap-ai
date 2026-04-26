@@ -6,6 +6,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from caremap_ai.orchestrator import CareMapAgentPipeline
 from caremap_ai.models import FacilityCapability
+from caremap_ai.query import QueryAgent
 from caremap_ai.triage import SymptomTriageAgent
 
 
@@ -51,3 +52,45 @@ def test_facility_capability_model_serializes_core_schema():
     assert data["name"] == "Example Hospital"
     assert data["has_icu"] is True
     assert "extracted_evidence" in data
+
+
+def test_query_agent_uses_city_distance_for_place_queries():
+    import pandas as pd
+
+    facilities = pd.DataFrame(
+        [
+            {
+                "name": "Thrissur Care Hospital",
+                "state": "Kerala",
+                "district_city": "Thrissur",
+                "pin_code": "680001",
+                "latitude": 10.5276,
+                "longitude": 76.2144,
+                "trust_score": 70,
+                "contradiction_flags": [],
+                "embedding_text": "emergency oxygen icu chest pain care thrissur kerala",
+                "has_icu": True,
+                "has_oxygen": True,
+                "availability_24_7": True,
+            },
+            {
+                "name": "Far High Trust Hospital",
+                "state": "Rajasthan",
+                "district_city": "Pokaran",
+                "pin_code": "345021",
+                "latitude": 26.9200,
+                "longitude": 71.9200,
+                "trust_score": 100,
+                "contradiction_flags": [],
+                "embedding_text": "emergency oxygen icu chest pain care",
+                "has_icu": True,
+                "has_oxygen": True,
+                "availability_24_7": True,
+            },
+        ]
+    )
+
+    answer = QueryAgent(facilities).answer("chest pain in thrissur", top_k=2)
+    assert answer["intent"]["city"] == "Thrissur"
+    assert answer["intent"]["state"] == "Kerala"
+    assert answer["ranked_facilities"][0]["name"] == "Thrissur Care Hospital"
