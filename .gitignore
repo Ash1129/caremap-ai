@@ -8,3 +8,18 @@ __pycache__/
 data/*.xlsx
 data/*.xls
 data/raw/
+
+# Next.js build output
+.next/
+genie-ui/.next/
+
+# Dependencies
+node_modules/
+genie-ui/node_modules/
+
+# Env files
+.env
+.env.local
+
+# OS files
+.DS_Store
