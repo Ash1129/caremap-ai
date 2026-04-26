@@ -8,19 +8,34 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "workspace", "Unity Catalog catalog")
-dbutils.widgets.text("schema", "caremap_ai", "Unity Catalog schema")
-dbutils.widgets.text("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support", "Natural language query")
-dbutils.widgets.text("openai_api_key", "", "OpenAI API key (leave blank to read from env/secret)")
-dbutils.widgets.text("top_k", "10", "Number of results to return")
+# ── Config — edit these directly if the widget UI throws errors ──────────
+DEFAULTS = {
+    "catalog": "workspace",
+    "schema": "caremap_ai",
+    "query": "Chest pain in Bihar, need emergency care with oxygen and ICU support",
+    "openai_api_key": "",  # leave blank to use OPENAI_API_KEY env var
+    "top_k": "10",
+}
 
-# getArgument is a Databricks built-in that returns the default when the widget
-# value is missing or the widget system hasn't initialised yet — safer than .get()
-catalog = getArgument("catalog", "workspace")
-schema = getArgument("schema", "caremap_ai")
-query = getArgument("query", "Chest pain in Bihar, need emergency care with oxygen and ICU support")
-openai_api_key = getArgument("openai_api_key", "") or None
-top_k = int(getArgument("top_k", "10"))
+def _w(name):
+    """Read a widget value; fall back to DEFAULTS if the widget system NPEs."""
+    try:
+        dbutils.widgets.text(name, DEFAULTS[name])
+    except Exception:
+        pass
+    try:
+        val = dbutils.widgets.get(name)
+        if isinstance(val, str) and "Exception" not in val:
+            return val
+    except Exception:
+        pass
+    return DEFAULTS[name]
+
+catalog        = _w("catalog")
+schema         = _w("schema")
+query          = _w("query")
+openai_api_key = _w("openai_api_key") or None
+top_k          = int(_w("top_k"))
 capability_table = f"{catalog}.{schema}.facility_capabilities"
 
 # COMMAND ----------
