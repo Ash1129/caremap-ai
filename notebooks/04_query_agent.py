@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # CareMap AI - 04 Query Agent
+# MAGIC # CareMap AI - 04 Query Agent (v2 — OpenAI embeddings)
 # MAGIC
 # MAGIC Accepts complex natural-language questions and retrieves relevant facilities using
 # MAGIC OpenAI semantic embeddings (`text-embedding-3-small`). Capabilities and geography
